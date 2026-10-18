@@ -1,0 +1,6 @@
+{
+  "name": "FirstHome Canada - First-Time Home Buyer Financial Engine",
+  "description": "Smart, visual first-time home buyer affordability planner, OSFI B-20 stress-test calculator, closing cost engine, and complete guide for Canadian first-time buyers and new immigrants.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
