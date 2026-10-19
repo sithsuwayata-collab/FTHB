@@ -8,15 +8,16 @@ import { MortgageInputs } from './types';
 import { runFullEngine } from './utils/mortgageEngine';
 import { PRESET_SCENARIOS } from './data/newcomerGuide';
 import { NavigationHeader } from './components/NavigationHeader';
-import { ApprovalVisualizer } from './components/ApprovalVisualizer';
-import { PracticalQuestionsPanel } from './components/PracticalQuestionsPanel';
-import { ApprovalInsightsAndBreakdown } from './components/ApprovalInsightsAndBreakdown';
+import { StressStatusBanner } from './components/StressStatusBanner';
+import { FinancialCalculator } from './components/FinancialCalculator';
+import { RateShockAndRentVsBuy } from './components/RateShockAndRentVsBuy';
+import { GuidePillarsTab } from './components/GuidePillarsTab';
 import { ChecklistTab } from './components/ChecklistTab';
 import { GlossaryTab } from './components/GlossaryTab';
 import { PrintReportView } from './components/PrintReportView';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'approval' | 'checklist' | 'glossary'>('approval');
+  const [activeTab, setActiveTab] = useState<'calculator' | 'simulators' | 'guide' | 'checklist' | 'glossary'>('calculator');
 
   const [inputs, setInputs] = useState<MortgageInputs>({
     purchasePrice: 650000,
@@ -27,15 +28,8 @@ export default function App() {
       familyGift: 0,
     },
     annualIncome: 140000,
-    creditTier: 'good',
-    expenses: {
-      carPayment: 400,
-      creditCardsLoans: 150,
-      groceriesFood: 800,
-      childcareFamily: 250,
-      phoneInternet: 160,
-      personalMisc: 300,
-    },
+    monthlyDebt: 400,
+    monthlyLiving: 2200,
     contractRate: 4.25,
     amortizationYears: 25,
     province: 'ON',
@@ -44,6 +38,7 @@ export default function App() {
     monthlyHeating: 175,
     rentalIncome: 0,
     rentalOffsetPct: 50,
+    currentMonthlyRent: 2400,
   });
 
   // Master real-time calculation engine
@@ -58,8 +53,8 @@ export default function App() {
       province: preset.province,
       purchasePrice: preset.price,
       annualIncome: preset.income,
-      creditTier: preset.creditTier || 'good',
-      expenses: { ...preset.expenses },
+      monthlyDebt: preset.debt,
+      monthlyLiving: preset.living,
       downPaymentSources: {
         fhsa: preset.fhsa,
         hbp: preset.hbp,
@@ -71,8 +66,9 @@ export default function App() {
       annualPropertyTax: preset.tax,
       monthlyCondoFee: preset.condo,
       rentalIncome: preset.rental,
+      currentMonthlyRent: preset.rent || 2400,
     }));
-    setActiveTab('approval');
+    setActiveTab('calculator');
   };
 
   const handlePrint = () => {
@@ -93,53 +89,65 @@ export default function App() {
         />
 
         {/* Main Workspace Container */}
-        <main className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6">
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 lg:p-8 space-y-6">
           
-          {/* TAB 1: VISUAL APPROVAL SIMULATOR */}
-          {activeTab === 'approval' && (
-            <div className="space-y-6">
-              {/* Visual Approval Probability Ring & Key Numbers */}
-              <ApprovalVisualizer result={calculationResult} />
+          {/* Top Real-Time Affordability & Stress Status Banner */}
+          <StressStatusBanner result={calculationResult} />
 
-              {/* Practical Questions Panel (Income, Everyday Expenses, Down Payment) */}
-              <PracticalQuestionsPanel
-                inputs={inputs}
-                setInputs={setInputs}
-              />
-
-              {/* Assessment Breakdown (Strengths, Blockers, Cash Flow, Closing Day Cash) */}
-              <ApprovalInsightsAndBreakdown result={calculationResult} />
-            </div>
+          {/* Active Tab View Rendering */}
+          {activeTab === 'calculator' && (
+            <FinancialCalculator
+              inputs={inputs}
+              setInputs={setInputs}
+              result={calculationResult}
+            />
           )}
 
-          {/* TAB 2: ACTION CHECKLIST */}
+          {activeTab === 'simulators' && (
+            <RateShockAndRentVsBuy
+              result={calculationResult}
+              currentRent={inputs.currentMonthlyRent}
+              onRentChange={(newRent) => setInputs(prev => ({ ...prev, currentMonthlyRent: newRent }))}
+            />
+          )}
+
+          {activeTab === 'guide' && (
+            <GuidePillarsTab />
+          )}
+
           {activeTab === 'checklist' && (
             <ChecklistTab />
           )}
 
-          {/* TAB 3: GLOSSARY & FAQ */}
           {activeTab === 'glossary' && (
             <GlossaryTab />
           )}
 
         </main>
 
-        {/* Minimal Fatigue-Free Footer */}
-        <footer className="mt-12 border-t border-slate-800/80 bg-slate-900/60 py-5 px-4 text-center text-xs text-slate-400">
-          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+        {/* Informative Footer */}
+        <footer className="mt-12 border-t border-slate-800/80 bg-slate-900/60 py-6 px-4 text-center text-xs text-slate-400 space-y-2">
+          <div className="max-w-4xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
             <div className="flex items-center gap-2">
               <span className="font-bold text-slate-200">FirstHome Canada</span>
               <span>·</span>
-              <span>OSFI B-20 Stress Test Compliant</span>
+              <span>OSFI B-20 Compliant Engine</span>
             </div>
-            <div className="text-[11px] text-slate-500">
-              For planning and educational purposes. Consult a licensed mortgage broker for formal approval.
+            <div className="flex items-center gap-4 text-[11px] text-slate-400">
+              <span>Updated for 2025/2026 Canadian Lending Rules</span>
+              <span>·</span>
+              <span>$1.5M Insured Cap</span>
+              <span>·</span>
+              <span>30-Yr FTB Amortization</span>
             </div>
           </div>
+          <p className="text-[10px] text-slate-500 max-w-3xl mx-auto">
+            Disclaimer: This application is for financial modeling, stress-testing, and educational decision-making for first-time home buyers. Calculations reflect standard OSFI B-20 guidelines, CMHC tiered insurance premiums, and provincial land transfer taxes. Always consult a licensed mortgage broker, real estate lawyer, and financial planner for formal underwriting approvals.
+          </p>
         </footer>
       </div>
 
-      {/* PRINT-ONLY DEDICATED 2-PAGE BLUEPRINT */}
+      {/* PRINT-ONLY DEDICATED 2-PAGE BLUEPRINT (Visible only during window.print()) */}
       <PrintReportView result={calculationResult} />
 
     </div>

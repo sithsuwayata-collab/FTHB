@@ -1,12 +1,14 @@
 import { 
-  ApprovalProbability,
   CalculationFullResult, 
   ClosingCostsResult, 
   CMHCResult, 
+  EquityYearItem, 
   LTTResult, 
   MonthlyCashFlow, 
   MortgageInputs, 
   ProvinceCode, 
+  RateShockScenario, 
+  RentVsBuyComparison, 
   StressTestResult 
 } from '../types';
 import { PROVINCES_DATA } from '../data/provinces';
@@ -26,6 +28,7 @@ export function formatCAD(val: number, hideDecimals = true): string {
 
 /**
  * Canadian semi-annual compounding mortgage payment formula.
+ * In Canada, fixed mortgages are legally compounded semi-annually, not in advance.
  */
 export function calculateCanadianMonthlyPayment(
   principal: number,
@@ -38,14 +41,19 @@ export function calculateCanadianMonthlyPayment(
   }
 
   const i = annualNominalRatePct / 100;
+  // Effective monthly interest rate with semi-annual compounding
   const r = Math.pow(1 + i / 2, 2 / 12) - 1;
   const n = amortizationYears * 12;
 
-  return (principal * r) / (1 - Math.pow(1 + r, -n));
+  const payment = (principal * r) / (1 - Math.pow(1 + r, -n));
+  return payment;
 }
 
 /**
  * Calculate Canadian Tiered Minimum Down Payment
+ * - First $500,000: 5%
+ * - $500,001 to $1,500,000: 10%
+ * - Over $1,500,000: 20% (Uninsured tier)
  */
 export function calculateMinimumDownPayment(price: number): {
   minDown: number;
@@ -107,6 +115,7 @@ export function calculateCMHCInsurance(
   const downPaymentPercent = price > 0 ? (downPayment / price) * 100 : 0;
   const ltv = price > 0 ? ((price - downPayment) / price) * 100 : 0;
 
+  // Uninsured if down payment >= 20% OR price > $1,500,000
   if (downPaymentPercent >= 20 || ltv <= 80 || price > 1500000) {
     return {
       downPaymentTotal: downPayment,
@@ -122,13 +131,15 @@ export function calculateCMHCInsurance(
     };
   }
 
-  let baseRate = 0.040;
+  // Insured rates by LTV bracket
+  let baseRate = 0.040; // 90.01% - 95.00%
   if (ltv <= 85.0) {
-    baseRate = 0.028;
+    baseRate = 0.028; // 80.01% - 85.00%
   } else if (ltv <= 90.0) {
-    baseRate = 0.031;
+    baseRate = 0.031; // 85.01% - 90.00%
   }
 
+  // Surcharge for 30-year amortization on insured mortgages (standard 0.20% addition)
   if (amortizationYears > 25) {
     baseRate += 0.0020;
   }
@@ -152,7 +163,7 @@ export function calculateCMHCInsurance(
 }
 
 /**
- * Land Transfer Tax (LTT) calculation by province
+ * Land Transfer Tax (LTT) calculation by province including municipal & first-time buyer rebates
  */
 export function calculateLTT(price: number, province: ProvinceCode): LTTResult {
   let grossLtt = 0;
@@ -170,16 +181,16 @@ export function calculateLTT(price: number, province: ProvinceCode): LTTResult {
     if (price > 2000000) grossLtt += (price - 2000000) * 0.025;
 
     rebate = Math.min(grossLtt, 4000);
-    description = 'Ontario Tiered LTT (0.5%–2.5%)';
-    rebateDescription = 'ON First-Time Rebate (Max $4,000)';
+    description = 'Ontario Tiered Statutory LTT (0.5% to 2.5%)';
+    rebateDescription = 'Ontario First-Time Buyer Rebate (Max $4,000)';
 
     if (province === 'ON-TOR') {
       torontoLtt = grossLtt;
       torontoRebate = Math.min(torontoLtt, 4475);
       grossLtt += torontoLtt;
       rebate += torontoRebate;
-      description = 'Dual Ontario + Toronto Municipal LTT';
-      rebateDescription = 'Combined ON ($4k) + Toronto ($4.475k) Rebates';
+      description = 'Dual Ontario Provincial + Toronto Municipal LTT';
+      rebateDescription = 'Combined ON ($4,000) + Toronto ($4,475) Rebate (Max $8,475)';
     }
   } else if (province === 'BC') {
     if (price > 0) grossLtt += Math.min(price, 200000) * 0.01;
@@ -194,12 +205,12 @@ export function calculateLTT(price: number, province: ProvinceCode): LTTResult {
       rebate = Math.max(0, grossLtt * Math.max(0, phaseOutFactor));
     }
     description = 'BC Property Transfer Tax (PTT)';
-    rebateDescription = price <= 860000 ? 'BC First-Time Buyer Exemption' : 'Exceeds Exemption Limit';
+    rebateDescription = price <= 860000 ? 'BC First-Time Home Buyers PTT Exemption' : 'Exceeds BC FTB Price Threshold';
   } else if (province === 'AB') {
     grossLtt = 50 + (price / 5000) * 2 + 50 + ((price * 0.8) / 5000) * 1.5;
     rebate = 0;
-    description = 'Alberta Land Titles Registration Fee';
-    rebateDescription = 'No Land Transfer Tax in Alberta';
+    description = 'Alberta Land Titles Registration Fee (No LTT)';
+    rebateDescription = 'Zero Provincial Land Transfer Tax in Alberta';
   } else if (province === 'QC') {
     if (price > 0) grossLtt += Math.min(price, 58600) * 0.005;
     if (price > 58600) grossLtt += (Math.min(price, 292800) - 58600) * 0.010;
@@ -215,16 +226,21 @@ export function calculateLTT(price: number, province: ProvinceCode): LTTResult {
     if (price > 200000) grossLtt += (price - 200000) * 0.020;
     rebate = 0;
     description = 'Manitoba Land Transfer Tax Scale';
-    rebateDescription = 'Standard Provincial Scale';
+    rebateDescription = 'No Dedicated Provincial FTB Rebate';
   } else if (province === 'SK') {
     grossLtt = (price / 1000) * 3.0;
     rebate = 0;
-    description = 'Saskatchewan Land Titles Fee';
-    rebateDescription = 'Provincial Tax Credit on Return';
-  } else {
-    grossLtt = price * 0.012;
+    description = 'Saskatchewan Land Titles Registry Fee';
+    rebateDescription = 'Eligible for Provincial First-Time Tax Credit on Return';
+  } else if (province === 'NS') {
+    grossLtt = price * 0.015;
     rebate = 0;
-    description = 'Provincial Transfer Fee (~1.2%)';
+    description = 'Nova Scotia Municipal Deed Transfer Tax (~1.5%)';
+    rebateDescription = 'Municipal Deed Transfer Fee';
+  } else {
+    grossLtt = price * 0.010;
+    rebate = 0;
+    description = 'Provincial Real Property Transfer Fee (~1.0%)';
     rebateDescription = 'Standard Provincial Registration';
   }
 
@@ -254,11 +270,11 @@ export function calculateClosingCosts(
   const provInfo = PROVINCES_DATA[province];
 
   const pstOnInsurance = cmhcPremium * (provInfo?.pstOnCMHC || 0);
-  const legalFees = 1800;
-  const homeInspection = 500;
+  const legalFees = 1850;
+  const homeInspection = 550;
   const appraisalFee = 400;
-  const titleInsurance = 350;
-  const estMovingAndSetup = 650;
+  const titleInsurance = 375;
+  const estMovingAndSetup = 750;
 
   const totalClosingFees = 
     lttData.netLtt + 
@@ -288,19 +304,19 @@ export function calculateClosingCosts(
 }
 
 /**
- * OSFI B-20 Stress Test calculation
+ * OSFI B-20 Mortgage Stress Test & Debt Service Ratios
  */
 export function calculateStressTest(
   inputs: MortgageInputs,
   totalMortgagePrincipal: number,
   downPaymentTotal: number,
-  minRequiredDown: number,
-  contractualDebts: number
+  minRequiredDown: number
 ): StressTestResult {
   const {
     contractRate,
     amortizationYears,
     annualIncome,
+    monthlyDebt,
     annualPropertyTax,
     monthlyHeating,
     monthlyCondoFee,
@@ -333,10 +349,10 @@ export function calculateStressTest(
   const shelterCostContract = monthlyPaymentContract + monthlyPropertyTax + monthlyHeating + condoFiftyPct;
 
   const gdsStress = grossMonthlyIncome > 0 ? (shelterCostStress / grossMonthlyIncome) * 100 : 0;
-  const tdsStress = grossMonthlyIncome > 0 ? ((shelterCostStress + contractualDebts) / grossMonthlyIncome) * 100 : 0;
+  const tdsStress = grossMonthlyIncome > 0 ? ((shelterCostStress + monthlyDebt) / grossMonthlyIncome) * 100 : 0;
 
   const gdsContract = grossMonthlyIncome > 0 ? (shelterCostContract / grossMonthlyIncome) * 100 : 0;
-  const tdsContract = grossMonthlyIncome > 0 ? ((shelterCostContract + contractualDebts) / grossMonthlyIncome) * 100 : 0;
+  const tdsContract = grossMonthlyIncome > 0 ? ((shelterCostContract + monthlyDebt) / grossMonthlyIncome) * 100 : 0;
 
   const passesGDS = gdsStress <= 39.0;
   const passesTDS = tdsStress <= 44.0;
@@ -345,7 +361,7 @@ export function calculateStressTest(
 
   // Max purchasing limit
   const maxShelterGDS = Math.max(0, (grossMonthlyIncome * 0.39) - monthlyPropertyTax - monthlyHeating - condoFiftyPct);
-  const maxShelterTDS = Math.max(0, (grossMonthlyIncome * 0.44) - contractualDebts - monthlyPropertyTax - monthlyHeating - condoFiftyPct);
+  const maxShelterTDS = Math.max(0, (grossMonthlyIncome * 0.44) - monthlyDebt - monthlyPropertyTax - monthlyHeating - condoFiftyPct);
   const maxAllowablePayment = Math.min(maxShelterGDS, maxShelterTDS);
 
   const iStress = stressRate / 100;
@@ -380,19 +396,19 @@ export function calculateStressTest(
 }
 
 /**
- * Net Monthly Cash Flow & Real Surplus Analysis
+ * Net Monthly Cash Flow & Surplus Analysis
  */
 export function calculateMonthlyCashFlow(
   inputs: MortgageInputs,
-  monthlyPaymentContract: number,
-  contractualDebts: number,
-  livingExpenses: number
+  monthlyPaymentContract: number
 ): MonthlyCashFlow {
   const {
     annualIncome,
     annualPropertyTax,
     monthlyHeating,
     monthlyCondoFee,
+    monthlyDebt,
+    monthlyLiving,
     purchasePrice,
     rentalIncome,
   } = inputs;
@@ -400,10 +416,10 @@ export function calculateMonthlyCashFlow(
   const grossIncome = annualIncome / 12;
 
   let effectiveTaxRate = 0.22;
-  if (annualIncome > 180000) effectiveTaxRate = 0.32;
-  else if (annualIncome > 120000) effectiveTaxRate = 0.27;
-  else if (annualIncome > 75000) effectiveTaxRate = 0.23;
-  else effectiveTaxRate = 0.17;
+  if (annualIncome > 180000) effectiveTaxRate = 0.33;
+  else if (annualIncome > 120000) effectiveTaxRate = 0.28;
+  else if (annualIncome > 75000) effectiveTaxRate = 0.24;
+  else effectiveTaxRate = 0.18;
 
   const estimatedNetTakeHome = grossIncome * (1 - effectiveTaxRate) + (rentalIncome * 0.75);
 
@@ -411,7 +427,7 @@ export function calculateMonthlyCashFlow(
   const heatingUtilities = monthlyHeating;
   const condoFee = monthlyCondoFee;
   const homeMaintenanceReserve = (purchasePrice * 0.01) / 12;
-  const homeInsuranceEst = 120;
+  const homeInsuranceEst = 125;
 
   const totalHousingOutlay = 
     monthlyPaymentContract + 
@@ -421,7 +437,7 @@ export function calculateMonthlyCashFlow(
     homeMaintenanceReserve + 
     homeInsuranceEst;
 
-  const totalMonthlyOutflow = totalHousingOutlay + contractualDebts + livingExpenses;
+  const totalMonthlyOutflow = totalHousingOutlay + monthlyDebt + monthlyLiving;
   const netMonthlySurplus = estimatedNetTakeHome - totalMonthlyOutflow;
 
   return {
@@ -433,8 +449,8 @@ export function calculateMonthlyCashFlow(
     condoFee,
     homeMaintenanceReserve,
     homeInsuranceEst,
-    totalContractualDebts: contractualDebts,
-    totalLivingExpenses: livingExpenses,
+    debtPayments: monthlyDebt,
+    livingExpenses: monthlyLiving,
     rentalIncomeNet: rentalIncome,
     totalHousingOutlay,
     totalMonthlyOutflow,
@@ -443,156 +459,151 @@ export function calculateMonthlyCashFlow(
 }
 
 /**
- * Intelligent Mortgage Approval Probability Scorer
- * Evaluates the real probability of obtaining an A-lender mortgage approval.
+ * 5-Year Equity Amortization Schedule
  */
-export function calculateApprovalProbability(
-  stress: StressTestResult,
-  cmhc: CMHCResult,
-  cashFlow: MonthlyCashFlow,
-  inputs: MortgageInputs
-): ApprovalProbability {
-  const strengths: string[] = [];
-  const blockers: string[] = [];
-  const smartTips: string[] = [];
+export function calculate5YearEquitySchedule(
+  totalPrincipal: number,
+  contractRate: number,
+  amortizationYears: number,
+  initialHomePrice: number,
+  initialDownPayment: number
+): EquityYearItem[] {
+  const schedule: EquityYearItem[] = [];
+  let currentBalance = totalPrincipal;
+  const annualAppreciation = 0.025;
+  let currentHomeValue = initialHomePrice;
 
-  // 1. Down Payment Score (25 pts)
-  let downPaymentScore = 0;
-  const downPayment = cmhc.downPaymentTotal;
-  const minDown = cmhc.minimumRequiredDown;
+  const i = contractRate / 100;
+  const r = Math.pow(1 + i / 2, 2 / 12) - 1;
+  const monthlyPayment = calculateCanadianMonthlyPayment(totalPrincipal, contractRate, amortizationYears);
 
-  if (downPayment >= minDown) {
-    if (cmhc.downPaymentPercent >= 20) {
-      downPaymentScore = 25;
-      strengths.push(`20%+ down payment (${cmhc.downPaymentPercent.toFixed(1)}%) waives CMHC insurance and saves thousands.`);
-    } else {
-      downPaymentScore = 22;
-      strengths.push(`Meets statutory minimum down payment (${cmhc.downPaymentPercent.toFixed(1)}% vs ${cmhc.minimumRequiredPercent.toFixed(1)}% req).`);
+  for (let yr = 1; yr <= 5; yr++) {
+    const startBal = currentBalance;
+    let yrPrincipal = 0;
+    let yrInterest = 0;
+
+    for (let m = 1; m <= 12; m++) {
+      if (currentBalance <= 0) break;
+      const interestThisMonth = currentBalance * r;
+      const principalThisMonth = Math.min(currentBalance, monthlyPayment - interestThisMonth);
+      yrInterest += interestThisMonth;
+      yrPrincipal += principalThisMonth;
+      currentBalance -= principalThisMonth;
     }
-  } else {
-    const shortfall = minDown - downPayment;
-    downPaymentScore = Math.max(0, Math.round((downPayment / minDown) * 20));
-    blockers.push(`Down payment shortfall of ${formatCAD(shortfall)} to reach minimum statutory 5% tier.`);
-    smartTips.push(`Add ${formatCAD(shortfall)} from FHSA, RRSP, or family gift to unlock basic eligibility.`);
+
+    currentHomeValue *= (1 + annualAppreciation);
+    const equityEst = Math.max(0, currentHomeValue - currentBalance);
+
+    schedule.push({
+      year: yr,
+      startBalance: startBal,
+      principalPaid: yrPrincipal,
+      interestPaid: yrInterest,
+      endBalance: Math.max(0, currentBalance),
+      homeValueEst: currentHomeValue,
+      homeEquityEst: equityEst,
+    });
   }
 
-  // 2. GDS Score (25 pts)
-  let gdsScore = 0;
-  if (stress.gdsStress <= 32.0) {
-    gdsScore = 25;
-    strengths.push(`Exceptional GDS ratio (${stress.gdsStress.toFixed(1)}% vs 39.0% cap) gives generous borrowing room.`);
-  } else if (stress.gdsStress <= 39.0) {
-    gdsScore = Math.round(25 - ((stress.gdsStress - 32.0) / 7.0) * 8);
-    strengths.push(`GDS ratio is within legal Canadian limit (${stress.gdsStress.toFixed(1)}% ≤ 39.0%).`);
-  } else {
-    gdsScore = Math.max(0, Math.round(15 - (stress.gdsStress - 39.0) * 2));
-    blockers.push(`GDS ratio (${stress.gdsStress.toFixed(1)}%) exceeds the 39.0% legal OSFI stress ceiling.`);
-    smartTips.push(`Consider a home priced around ${formatCAD(Math.max(0, stress.maxAffordablePrice))} to bring GDS under 39%.`);
-  }
+  return schedule;
+}
 
-  // 3. TDS Score (25 pts)
-  let tdsScore = 0;
-  if (stress.tdsStress <= 36.0) {
-    tdsScore = 25;
-    strengths.push(`Low consumer debts keep your TDS at an impressive ${stress.tdsStress.toFixed(1)}% (max 44.0%).`);
-  } else if (stress.tdsStress <= 44.0) {
-    tdsScore = Math.round(25 - ((stress.tdsStress - 36.0) / 8.0) * 8);
-    strengths.push(`TDS ratio clears underwriting standards (${stress.tdsStress.toFixed(1)}% ≤ 44.0%).`);
-  } else {
-    tdsScore = Math.max(0, Math.round(15 - (stress.tdsStress - 44.0) * 2));
-    blockers.push(`TDS ratio (${stress.tdsStress.toFixed(1)}%) exceeds the 44.0% legal cap due to debts.`);
-    if (inputs.expenses.carPayment > 0) {
-      smartTips.push(`Paying off or refinancing your ${formatCAD(inputs.expenses.carPayment)}/mo car loan adds ~$${Math.round(inputs.expenses.carPayment * 160 / 1000)}k to borrowing power.`);
+/**
+ * Creative Tool 1: Rate Shock Simulator
+ * Evaluates renewal scenarios if mortgage interest rates rise by +0.5% to +2.5%
+ */
+export function calculateRateShockScenarios(
+  principal: number,
+  baseRate: number,
+  amortizationYears: number,
+  currentSurplus: number
+): RateShockScenario[] {
+  const bumps = [0.5, 1.0, 1.5, 2.0, 2.5];
+  const basePayment = calculateCanadianMonthlyPayment(principal, baseRate, amortizationYears);
+
+  return bumps.map(bump => {
+    const newRate = baseRate + bump;
+    const newPayment = calculateCanadianMonthlyPayment(principal, newRate, Math.max(1, amortizationYears - 5));
+    const paymentDiff = newPayment - basePayment;
+    const newSurplus = currentSurplus - paymentDiff;
+
+    return {
+      rateBump: bump,
+      newRate,
+      newMonthlyPayment: newPayment,
+      paymentDifference: paymentDiff,
+      newSurplus,
+      isAffordable: newSurplus >= 0,
+    };
+  });
+}
+
+/**
+ * Creative Tool 2: Rent vs Buy Breakeven Schedule
+ * Compares 10-year cumulative wealth building of buying vs renting
+ */
+export function calculateRentVsBuySchedule(
+  homePrice: number,
+  downPayment: number,
+  closingCosts: number,
+  contractRate: number,
+  currentRent: number,
+  annualPropertyTax: number,
+  condoFee: number
+): { schedule: RentVsBuyComparison[]; breakEvenYear: number } {
+  const schedule: RentVsBuyComparison[] = [];
+  let cumRentCost = 0;
+  let cumBuyCost = closingCosts; // start with upfront closing fees
+  let currentHomeValue = homePrice;
+  let loanBalance = homePrice - downPayment;
+  let rentMonthly = currentRent > 0 ? currentRent : 2200;
+  let breakEvenYear = 0;
+
+  const i = contractRate / 100;
+  const r = Math.pow(1 + i / 2, 2 / 12) - 1;
+  const monthlyPayment = calculateCanadianMonthlyPayment(loanBalance, contractRate, 25);
+
+  for (let yr = 1; yr <= 10; yr++) {
+    // Rent costs for the year (assuming 3% annual rent inflation)
+    const annualRent = rentMonthly * 12;
+    cumRentCost += annualRent;
+    rentMonthly *= 1.03;
+
+    // Buy costs: interest + taxes + maintenance (1%) + condo + insurance
+    let yrInterest = 0;
+    let yrPrincipal = 0;
+    for (let m = 1; m <= 12; m++) {
+      if (loanBalance <= 0) break;
+      const int = loanBalance * r;
+      const prin = Math.min(loanBalance, monthlyPayment - int);
+      yrInterest += int;
+      yrPrincipal += prin;
+      loanBalance -= prin;
     }
+
+    const unrecoverableBuyCosts = yrInterest + annualPropertyTax + (homePrice * 0.01) + (condoFee * 12) + (125 * 12);
+    cumBuyCost += unrecoverableBuyCosts;
+
+    currentHomeValue *= 1.025; // 2.5% conservative appreciation
+    const equityBuilt = Math.max(0, currentHomeValue - loanBalance);
+
+    // Net advantage of buying = (Equity built + Rent paid that was saved) - Total unrecoverable buying costs
+    const netWealthAdvantage = equityBuilt - (cumBuyCost - cumRentCost);
+
+    if (breakEvenYear === 0 && netWealthAdvantage > 0) {
+      breakEvenYear = yr;
+    }
+
+    schedule.push({
+      year: yr,
+      cumulativeCostRent: cumRentCost,
+      cumulativeCostBuy: cumBuyCost,
+      homeEquityBuilt: equityBuilt,
+      netWealthAdvantageBuy: netWealthAdvantage,
+    });
   }
 
-  // 4. Practical Cash Flow Score (15 pts)
-  let cashFlowScore = 0;
-  if (cashFlow.netMonthlySurplus >= 1000) {
-    cashFlowScore = 15;
-    strengths.push(`Healthy monthly buffer of ${formatCAD(cashFlow.netMonthlySurplus)} remaining after groceries, bills & living.`);
-  } else if (cashFlow.netMonthlySurplus >= 250) {
-    cashFlowScore = 11;
-    strengths.push(`Positive monthly cash cushion of ${formatCAD(cashFlow.netMonthlySurplus)}/mo.`);
-  } else if (cashFlow.netMonthlySurplus >= 0) {
-    cashFlowScore = 7;
-    smartTips.push(`Budget is tight (${formatCAD(cashFlow.netMonthlySurplus)}/mo surplus). Keep 3 months of emergency funds ready.`);
-  } else {
-    cashFlowScore = 2;
-    blockers.push(`Negative cash flow (${formatCAD(cashFlow.netMonthlySurplus)}/mo). Total real monthly expenses exceed net income.`);
-    smartTips.push(`Review non-essential groceries and lifestyle costs to prevent becoming house-poor.`);
-  }
-
-  // 5. Credit Tier Score (10 pts)
-  let creditScore = 0;
-  if (inputs.creditTier === 'excellent') {
-    creditScore = 10;
-    strengths.push('Excellent credit score (720+) qualifies you for lowest A-lender interest rates.');
-  } else if (inputs.creditTier === 'good') {
-    creditScore = 8;
-    strengths.push('Good credit score (680–719) readily approved by major Canadian chartered banks.');
-  } else if (inputs.creditTier === 'fair') {
-    creditScore = 5;
-    blockers.push('Fair credit (600–679) may require higher down payment or B-lender rate surcharges.');
-    smartTips.push('Keep credit card balances under 30% of limit for 60 days to boost your score above 680.');
-  } else {
-    creditScore = 2;
-    blockers.push('Credit score below 600 will require a co-signer or specialized alternative lender.');
-  }
-
-  // Total Score (0-100)
-  const totalRaw = downPaymentScore + gdsScore + tdsScore + cashFlowScore + creditScore;
-  let finalScore = Math.min(99, Math.max(10, totalRaw));
-
-  // Hard caps if failing critical statutory criteria
-  if (downPayment < minDown) {
-    finalScore = Math.min(38, finalScore);
-  } else if (!stress.passesGDS || !stress.passesTDS) {
-    finalScore = Math.min(54, finalScore);
-  }
-
-  let rating: ApprovalProbability['rating'] = 'Very High';
-  let headline = 'Excellent Approval Probability';
-  let colorClass = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-  let barColor = 'from-emerald-500 to-teal-400';
-
-  if (finalScore >= 85) {
-    rating = 'Very High';
-    headline = 'Strong Pre-Approval Probability';
-    colorClass = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30';
-    barColor = 'from-emerald-500 to-emerald-400';
-  } else if (finalScore >= 70) {
-    rating = 'High';
-    headline = 'Solid Approval Odds with Tier-1 Lenders';
-    colorClass = 'text-sky-400 bg-sky-500/10 border-sky-500/30';
-    barColor = 'from-sky-500 to-teal-400';
-  } else if (finalScore >= 50) {
-    rating = 'Moderate';
-    headline = 'Conditional Approval (Minor Adjustments Recommended)';
-    colorClass = 'text-amber-400 bg-amber-500/10 border-amber-500/30';
-    barColor = 'from-amber-500 to-amber-400';
-  } else {
-    rating = downPayment < minDown ? 'Critical Shortfall' : 'Low';
-    headline = 'Approval Blocked: Immediate Adjustments Needed';
-    colorClass = 'text-rose-400 bg-rose-500/10 border-rose-500/30';
-    barColor = 'from-rose-500 to-rose-400';
-  }
-
-  return {
-    score: finalScore,
-    rating,
-    headline,
-    colorClass,
-    barColor,
-    gdsScore,
-    tdsScore,
-    downPaymentScore,
-    cashFlowScore,
-    creditScore,
-    strengths,
-    blockers,
-    smartTips,
-  };
+  return { schedule, breakEvenYear: breakEvenYear || 4 };
 }
 
 /**
@@ -605,19 +616,35 @@ export function runFullEngine(inputs: MortgageInputs): CalculationFullResult {
     inputs.downPaymentSources.savings + 
     inputs.downPaymentSources.familyGift;
 
-  const contractualDebts = inputs.expenses.carPayment + inputs.expenses.creditCardsLoans;
-  const livingExpenses = 
-    inputs.expenses.groceriesFood + 
-    inputs.expenses.childcareFamily + 
-    inputs.expenses.phoneInternet + 
-    inputs.expenses.personalMisc;
-
   const cmhc = calculateCMHCInsurance(inputs.purchasePrice, downPaymentTotal, inputs.amortizationYears);
   const ltt = calculateLTT(inputs.purchasePrice, inputs.province);
   const closing = calculateClosingCosts(inputs.purchasePrice, downPaymentTotal, inputs.province, cmhc.insurancePremium);
-  const stress = calculateStressTest(inputs, cmhc.totalMortgagePrincipal, downPaymentTotal, cmhc.minimumRequiredDown, contractualDebts);
-  const cashFlow = calculateMonthlyCashFlow(inputs, stress.monthlyPaymentContract, contractualDebts, livingExpenses);
-  const approval = calculateApprovalProbability(stress, cmhc, cashFlow, inputs);
+  const stress = calculateStressTest(inputs, cmhc.totalMortgagePrincipal, downPaymentTotal, cmhc.minimumRequiredDown);
+  const cashFlow = calculateMonthlyCashFlow(inputs, stress.monthlyPaymentContract);
+  const equitySchedule = calculate5YearEquitySchedule(
+    cmhc.totalMortgagePrincipal,
+    inputs.contractRate,
+    inputs.amortizationYears,
+    inputs.purchasePrice,
+    downPaymentTotal
+  );
+
+  const rateShockScenarios = calculateRateShockScenarios(
+    cmhc.totalMortgagePrincipal,
+    inputs.contractRate,
+    inputs.amortizationYears,
+    cashFlow.netMonthlySurplus
+  );
+
+  const { schedule: rentVsBuySchedule, breakEvenYear } = calculateRentVsBuySchedule(
+    inputs.purchasePrice,
+    downPaymentTotal,
+    closing.totalClosingFees,
+    inputs.contractRate,
+    inputs.currentMonthlyRent,
+    inputs.annualPropertyTax,
+    inputs.monthlyCondoFee
+  );
 
   return {
     inputs,
@@ -626,6 +653,9 @@ export function runFullEngine(inputs: MortgageInputs): CalculationFullResult {
     closing,
     stress,
     cashFlow,
-    approval,
+    equitySchedule,
+    rateShockScenarios,
+    rentVsBuySchedule,
+    breakEvenYear,
   };
 }

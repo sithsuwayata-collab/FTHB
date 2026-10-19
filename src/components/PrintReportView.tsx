@@ -328,17 +328,17 @@ export const PrintReportView: React.FC<PrintReportViewProps> = ({ result }) => {
                   </td>
                 </tr>
                 <tr>
-                  <td className="p-1 border border-slate-300">• Existing Monthly Debts (Car, Loans)</td>
-                  <td className="p-1 border border-slate-300">{formatCAD(cashFlow.totalContractualDebts)}</td>
+                  <td className="p-1 border border-slate-300">• Existing Monthly Debts</td>
+                  <td className="p-1 border border-slate-300">{formatCAD(cashFlow.debtPayments)}</td>
                   <td className="p-1 border border-slate-300">
-                    {((cashFlow.totalContractualDebts / cashFlow.estimatedNetTakeHome) * 100).toFixed(1)}%
+                    {((cashFlow.debtPayments / cashFlow.estimatedNetTakeHome) * 100).toFixed(1)}%
                   </td>
                 </tr>
                 <tr>
-                  <td className="p-1 border border-slate-300">• Living Expenses (Groceries, Kids, Bills)</td>
-                  <td className="p-1 border border-slate-300">{formatCAD(cashFlow.totalLivingExpenses)}</td>
+                  <td className="p-1 border border-slate-300">• Monthly Living Expenses</td>
+                  <td className="p-1 border border-slate-300">{formatCAD(cashFlow.livingExpenses)}</td>
                   <td className="p-1 border border-slate-300">
-                    {((cashFlow.totalLivingExpenses / cashFlow.estimatedNetTakeHome) * 100).toFixed(1)}%
+                    {((cashFlow.livingExpenses / cashFlow.estimatedNetTakeHome) * 100).toFixed(1)}%
                   </td>
                 </tr>
                 <tr className="bg-sky-50 font-bold">

@@ -547,15 +547,8 @@ export const PRESET_SCENARIOS = [
     province: 'ON-TOR' as const,
     price: 620000,
     income: 130000,
-    creditTier: 'good' as const,
-    expenses: {
-      carPayment: 350,
-      creditCardsLoans: 150,
-      groceriesFood: 750,
-      childcareFamily: 200,
-      phoneInternet: 150,
-      personalMisc: 250,
-    },
+    debt: 350,
+    living: 2200,
     fhsa: 16000,
     hbp: 30000,
     savings: 20000,
@@ -566,22 +559,15 @@ export const PRESET_SCENARIOS = [
     condo: 520,
     rental: 0,
     rent: 2600,
-    description: 'Transit-friendly starter condo in Toronto with realistic transit & grocery expenses.'
+    description: 'High-density transit-oriented starter condo in the City of Toronto.'
   },
   {
     name: 'Calgary Detached Home',
     province: 'AB' as const,
     price: 650000,
     income: 140000,
-    creditTier: 'excellent' as const,
-    expenses: {
-      carPayment: 400,
-      creditCardsLoans: 100,
-      groceriesFood: 850,
-      childcareFamily: 300,
-      phoneInternet: 160,
-      personalMisc: 300,
-    },
+    debt: 400,
+    living: 2300,
     fhsa: 16000,
     hbp: 35000,
     savings: 25000,
@@ -592,22 +578,15 @@ export const PRESET_SCENARIOS = [
     condo: 0,
     rental: 0,
     rent: 2400,
-    description: 'Detached family home with yard and garage in Alberta with zero land transfer tax.'
+    description: 'Spacious detached single-family home with yard and double garage in Alberta (Zero LTT).'
   },
   {
     name: 'Ottawa Freehold Townhome',
     province: 'ON' as const,
     price: 595000,
     income: 125000,
-    creditTier: 'good' as const,
-    expenses: {
-      carPayment: 300,
-      creditCardsLoans: 120,
-      groceriesFood: 700,
-      childcareFamily: 250,
-      phoneInternet: 140,
-      personalMisc: 200,
-    },
+    debt: 300,
+    living: 2100,
     fhsa: 16000,
     hbp: 30000,
     savings: 20000,
@@ -618,22 +597,15 @@ export const PRESET_SCENARIOS = [
     condo: 0,
     rental: 0,
     rent: 2300,
-    description: 'Suburban freehold townhome with no condo fees and steady civil/tech income.'
+    description: 'Family-friendly freehold townhome with no monthly condo fees in the national capital.'
   },
   {
     name: 'Edmonton Starter with Suite',
     province: 'AB' as const,
     price: 460000,
     income: 105000,
-    creditTier: 'good' as const,
-    expenses: {
-      carPayment: 250,
-      creditCardsLoans: 100,
-      groceriesFood: 650,
-      childcareFamily: 150,
-      phoneInternet: 130,
-      personalMisc: 200,
-    },
+    debt: 250,
+    living: 1900,
     fhsa: 8000,
     hbp: 25000,
     savings: 15000,
@@ -644,22 +616,15 @@ export const PRESET_SCENARIOS = [
     condo: 0,
     rental: 1300,
     rent: 1850,
-    description: 'High cash-flow starter home where basement tenant income offsets mortgage debt.'
+    description: 'High-cash-flow starter home where basement tenant rental income subsidizes the mortgage.'
   },
   {
     name: 'Vancouver Metro Townhouse',
     province: 'BC' as const,
     price: 820000,
     income: 175000,
-    creditTier: 'excellent' as const,
-    expenses: {
-      carPayment: 450,
-      creditCardsLoans: 200,
-      groceriesFood: 950,
-      childcareFamily: 400,
-      phoneInternet: 170,
-      personalMisc: 350,
-    },
+    debt: 450,
+    living: 2600,
     fhsa: 16000,
     hbp: 50000,
     savings: 30000,
@@ -670,7 +635,25 @@ export const PRESET_SCENARIOS = [
     condo: 380,
     rental: 0,
     rent: 3100,
-    description: 'Metro Vancouver townhouse with strong dual-income household and PTT exemption.'
+    description: 'Modern townhouse in Greater Vancouver (Surrey/Coquitlam/Burnaby) with PTT exemption.'
+  },
+  {
+    name: 'Montreal Starter Condo',
+    province: 'QC' as const,
+    price: 430000,
+    income: 95000,
+    debt: 200,
+    living: 1800,
+    fhsa: 16000,
+    hbp: 25000,
+    savings: 15000,
+    gift: 0,
+    rate: 4.25,
+    amort: 25,
+    tax: 3400,
+    condo: 310,
+    rental: 0,
+    rent: 1750,
+    description: 'Urban Montreal condo close to metro with affordable entry pricing.'
   }
 ];
-
