@@ -11,6 +11,8 @@ export type ProvinceCode =
   | 'PE' 
   | 'NL';
 
+export type CreditTier = 'excellent' | 'good' | 'fair' | 'poor';
+
 export interface ProvinceInfo {
   code: ProvinceCode;
   name: string;
@@ -24,6 +26,15 @@ export interface ProvinceInfo {
   keyHighlight: string;
 }
 
+export interface PracticalExpenses {
+  carPayment: number;       // Contractual debt (TDS)
+  creditCardsLoans: number; // Contractual debt (TDS)
+  groceriesFood: number;    // Living expense
+  childcareFamily: number;  // Living expense
+  phoneInternet: number;    // Living expense
+  personalMisc: number;     // Living expense
+}
+
 export interface DownPaymentSources {
   fhsa: number;
   hbp: number;
@@ -35,8 +46,8 @@ export interface MortgageInputs {
   purchasePrice: number;
   downPaymentSources: DownPaymentSources;
   annualIncome: number;
-  monthlyDebt: number;
-  monthlyLiving: number;
+  creditTier: CreditTier;
+  expenses: PracticalExpenses;
   contractRate: number;
   amortizationYears: number; // 25 or 30
   province: ProvinceCode;
@@ -45,8 +56,6 @@ export interface MortgageInputs {
   monthlyHeating: number;
   rentalIncome: number;
   rentalOffsetPct: number;
-  // Rent vs Buy comparison input
-  currentMonthlyRent: number;
 }
 
 export interface CMHCResult {
@@ -91,6 +100,22 @@ export interface ClosingCostsResult {
   totalCashRequired: number;
 }
 
+export interface ApprovalProbability {
+  score: number; // 0 to 100
+  rating: 'Very High' | 'High' | 'Moderate' | 'Low' | 'Critical Shortfall';
+  headline: string;
+  colorClass: string;
+  barColor: string;
+  gdsScore: number;
+  tdsScore: number;
+  downPaymentScore: number;
+  cashFlowScore: number;
+  creditScore: number;
+  strengths: string[];
+  blockers: string[];
+  smartTips: string[];
+}
+
 export interface StressTestResult {
   contractRate: number;
   stressRate: number;
@@ -116,41 +141,14 @@ export interface MonthlyCashFlow {
   propertyTax: number;
   heatingUtilities: number;
   condoFee: number;
-  homeMaintenanceReserve: number; // 1% of price / 12
+  homeMaintenanceReserve: number;
   homeInsuranceEst: number;
-  debtPayments: number;
-  livingExpenses: number;
+  totalContractualDebts: number;
+  totalLivingExpenses: number;
   rentalIncomeNet: number;
   totalHousingOutlay: number;
   totalMonthlyOutflow: number;
   netMonthlySurplus: number;
-}
-
-export interface EquityYearItem {
-  year: number;
-  startBalance: number;
-  principalPaid: number;
-  interestPaid: number;
-  endBalance: number;
-  homeValueEst: number;
-  homeEquityEst: number;
-}
-
-export interface RateShockScenario {
-  rateBump: number;
-  newRate: number;
-  newMonthlyPayment: number;
-  paymentDifference: number;
-  newSurplus: number;
-  isAffordable: boolean;
-}
-
-export interface RentVsBuyComparison {
-  year: number;
-  cumulativeCostRent: number;
-  cumulativeCostBuy: number;
-  homeEquityBuilt: number;
-  netWealthAdvantageBuy: number;
 }
 
 export interface CalculationFullResult {
@@ -160,8 +158,5 @@ export interface CalculationFullResult {
   closing: ClosingCostsResult;
   stress: StressTestResult;
   cashFlow: MonthlyCashFlow;
-  equitySchedule: EquityYearItem[];
-  rateShockScenarios: RateShockScenario[];
-  rentVsBuySchedule: RentVsBuyComparison[];
-  breakEvenYear: number;
+  approval: ApprovalProbability;
 }
